@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     const safeTool = typeof tool === "string" ? tool.slice(0, 60) : "Edit foto";
     const lightingPresets = { natural: "gunakan cahaya alami lembut dan seimbang", softbox: "gunakan pencahayaan softbox studio profesional yang lembut dan terarah", golden: "gunakan cahaya golden hour hangat", dramatic: "gunakan pencahayaan studio dramatis dengan bayangan terkontrol", clean: "gunakan pencahayaan komersial bersih, terang, dan merata" };
     const lightingInstruction = lightingPresets[lighting] || lightingPresets.softbox;
-    const lockInstructions = [faceLock ? "Prioritaskan konsistensi wajah: pertahankan wajah, ciri, ekspresi, dan identitas visual subjek semirip mungkin dengan foto referensi; jangan mengubah wajah." : "", productLock ? "Prioritaskan konsistensi produk: pertahankan bentuk, proporsi, warna, label, logo, material, dan detail produk sesuai foto referensi; jangan mendesain ulang produk." : ""].filter(Boolean).join(" ");
+    const lockInstructions = [faceLock ? "ATURAN WAJAH PALING UTAMA: foto input adalah satu-satunya sumber identitas. Pertahankan orang yang sama persis dan jangan menciptakan ulang atau menafsirkan ulang wajah. Pertahankan geometri wajah dan proporsi kepala, jarak dan bentuk mata, alis, hidung, bibir, pipi, rahang, dagu, telinga, garis rambut, warna kulit, usia tampak, ekspresi, arah pandang, dan sudut kepala sesuai foto asli. Pertahankan hijab, riasan, aksesori, serta detail wajah yang terlihat. DILARANG mengubah bentuk wajah, membuat wajah lebih cantik/tirus, mengganti ekspresi, mengubah usia, menghaluskan kulit berlebihan, mengubah makeup, atau mengubah identitas. Jika instruksi edit bertentangan dengan kemiripan wajah, utamakan mempertahankan wajah dan abaikan perubahan pada wajah. Lakukan perubahan hanya pada area non-wajah sejauh memungkinkan." : "", productLock ? "Prioritaskan konsistensi produk: pertahankan bentuk, proporsi, warna, label, logo, material, dan detail produk sesuai foto referensi; jangan mendesain ulang produk." : ""].filter(Boolean).join(" ");
     const retouchInstructions = {
       natural: "Lakukan retouch natural: pertahankan tekstur pori kulit, garis ekspresi, dan detail alami. Hilangkan hanya noda sementara yang mengganggu; hindari efek kulit plastik.",
       studio: "Lakukan retouch studio profesional: rapikan pencahayaan, white balance, dan ketidaksempurnaan kecil secara halus; jaga tekstur dan detail asli.",
@@ -87,7 +87,7 @@ export default async function handler(req, res) {
       none: "Jangan lakukan retouch kecantikan tambahan di luar instruksi utama."
     };
     const strength = Math.min(100, Math.max(0, Number(retouchStrength) || 0));
-    const retouchInstruction = retouchInstructions[retouchProfile] || retouchInstructions.natural;
+    const retouchInstruction = faceLock ? "Dengan Face Lock aktif, jangan melakukan retouch generatif pada wajah: jangan mengubah bentuk atau fitur, jangan melakukan face enhancement, beauty filter, skin smoothing, atau penggantian wajah. Pertahankan tekstur wajah asli." : (retouchInstructions[retouchProfile] || retouchInstructions.natural);
     const backgroundInstruction = backgroundMode === "keep"
       ? "Pertahankan latar belakang asli semirip mungkin; jangan mengganti lokasi atau menambahkan objek latar yang tidak diminta."
       : "Latar belakang boleh diubah sesuai instruksi prompt, tetapi pisahkan subjek dan latar secara alami.";
