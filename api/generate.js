@@ -6,52 +6,91 @@ export const config = {
   maxDuration: 60
 };
 
+const MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const allowedSizes = new Set(["1024x1024", "1024x1536", "1536x1024"]);
+
+function decodeBase64(value) {
+  const clean = value.includes(",") ? value.split(",").pop() : value;
+  return Buffer.from(clean, "base64");
+}
+
+async function generateOne({ accountId, token, imageBytes, prompt, width, height }) {
+  const form = new FormData();
+  form.append("prompt", prompt);
+  form.append("input_image_0", new Blob([imageBytes], { type: "image/jpeg" }), "reference.jpg");
+  form.append("width", String(width));
+  form.append("height", String(height));
+  form.append("guidance", "4");
+
+  const upstream = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${MODEL}`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      signal: AbortSignal.timeout(50000)
+    }
+  );
+
+  const payload = await upstream.json().catch(() => ({}));
+  if (!upstream.ok || payload.success === false) {
+    const detail = payload?.errors?.[0]?.message || payload?.error || "Cloudflare Workers AI gagal memproses gambar.";
+    const err = new Error(detail);
+    err.status = upstream.status || 502;
+    throw err;
+  }
+
+  const image = payload?.result?.image || payload?.result?.data?.[0]?.b64_json;
+  if (typeof image !== "string" || !image.length) {
+    throw new Error("Cloudflare tidak mengembalikan gambar. Silakan coba lagi.");
+  }
+  return image.startsWith("data:") ? image.split(",").pop() : image;
+}
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "Metode tidak diizinkan." });
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return res.status(503).json({ error: "OpenAI belum dikonfigurasi. Tambahkan OPENAI_API_KEY di Vercel Environment Variables." });
+
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!accountId || !token) {
+    return res.status(503).json({ error: "Cloudflare belum dikonfigurasi. Periksa CLOUDFLARE_ACCOUNT_ID dan CLOUDFLARE_API_TOKEN di Vercel." });
+  }
 
   try {
     const { imageBase64, prompt, size, count, tool } = req.body || {};
-    if (typeof imageBase64 !== "string" || imageBase64.length < 100) return res.status(400).json({ error: "Foto tidak valid. Silakan unggah ulang." });
-    if (imageBase64.length > 3_900_000) return res.status(413).json({ error: "Foto terlalu besar. Gunakan foto yang lebih kecil." });
-    if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 1500) return res.status(400).json({ error: "Prompt wajib diisi dan maksimal 1.500 karakter." });
-    const n = Math.min(4, Math.max(1, Number.parseInt(count, 10) || 1));
-    const outputSize = allowedSizes.has(size) ? size : "1024x1024";
-    const bytes = Buffer.from(imageBase64, "base64");
-    if (bytes.length < 50 || bytes.length > 2_900_000) return res.status(413).json({ error: "Ukuran foto hasil kompresi tidak sesuai batas." });
-
-    const safeTool = typeof tool === "string" ? tool.slice(0, 60) : "Edit foto";
-    const fullPrompt = `Tugas: ${safeTool}. Edit foto referensi yang diunggah sesuai instruksi berikut: ${prompt.trim()}. Gunakan foto unggahan sebagai referensi utama. Pertahankan subjek, identitas, dan ciri penting yang tidak diminta untuk diubah. Hasilkan foto berkualitas tinggi, realistis, detail, dan siap digunakan.`;
-    const form = new FormData();
-    form.append("model", "gpt-image-2");
-    form.append("prompt", fullPrompt);
-    form.append("size", outputSize);
-    form.append("quality", "medium");
-    form.append("n", String(n));
-    form.append("output_format", "png");
-    form.append("image[]", new Blob([bytes], { type: "image/jpeg" }), "reference.jpg");
-
-    const upstream = await fetch("https://api.openai.com/v1/images/edits", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}` },
-      body: form,
-      signal: AbortSignal.timeout(55000)
-    });
-    const payload = await upstream.json().catch(() => ({}));
-    if (!upstream.ok) {
-      const message = payload?.error?.message || "Layanan OpenAI gagal memproses gambar.";
-      const status = upstream.status === 401 ? 502 : upstream.status === 429 ? 429 : 502;
-      return res.status(status).json({ error: message });
+    if (typeof imageBase64 !== "string" || imageBase64.length < 100) {
+      return res.status(400).json({ error: "Foto tidak valid. Silakan unggah ulang." });
     }
-    const images = (payload.data || []).map(item => item.b64_json).filter(Boolean);
-    if (!images.length) return res.status(502).json({ error: "OpenAI tidak mengembalikan gambar. Silakan coba lagi." });
-    return res.status(200).json({ images, model: "gpt-image-2" });
+    if (imageBase64.length > 3_900_000) {
+      return res.status(413).json({ error: "Foto terlalu besar. Silakan unggah ulang dengan ukuran lebih kecil." });
+    }
+    if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 1500) {
+      return res.status(400).json({ error: "Prompt wajib diisi dan maksimal 1.500 karakter." });
+    }
+
+    const imageBytes = decodeBase64(imageBase64);
+    if (imageBytes.length < 50 || imageBytes.length > 2_900_000) {
+      return res.status(413).json({ error: "Ukuran foto referensi tidak sesuai batas." });
+    }
+
+    const outputSize = allowedSizes.has(size) ? size : "1024x1024";
+    const [width, height] = outputSize.split("x").map(Number);
+    const safeTool = typeof tool === "string" ? tool.slice(0, 60) : "Edit foto";
+    const fullPrompt = `Tugas: ${safeTool}. Edit foto referensi yang diunggah sesuai instruksi berikut: ${prompt.trim()}. Gunakan gambar referensi sebagai dasar utama. Pertahankan identitas, komposisi subjek, dan ciri penting yang tidak diminta untuk diubah. Hasilkan foto realistis, berkualitas tinggi, detail, dengan pencahayaan dan hasil akhir profesional.`;
+
+    const n = Math.min(4, Math.max(1, Number.parseInt(count, 10) || 1));
+    const images = await Promise.all(
+      Array.from({ length: n }, () => generateOne({ accountId, token, imageBytes, prompt: fullPrompt, width, height }))
+    );
+
+    return res.status(200).json({ images, model: MODEL, provider: "Cloudflare Workers AI" });
   } catch (error) {
-    const message = error?.name === "TimeoutError" ? "Proses terlalu lama. Coba jumlah variasi lebih sedikit." : "Terjadi kesalahan server saat memproses gambar.";
-    return res.status(500).json({ error: message });
+    const status = error.status === 401 || error.status === 403 ? 502 :
+      error.status === 429 ? 429 : error.status === 413 ? 413 : 502;
+    const message = error?.name === "TimeoutError"
+      ? "Proses AI terlalu lama. Coba satu variasi terlebih dahulu."
+      : error?.message || "Terjadi kesalahan saat menghubungi Cloudflare Workers AI.";
+    return res.status(status).json({ error: message });
   }
 }
