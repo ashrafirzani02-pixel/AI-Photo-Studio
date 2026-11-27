@@ -58,7 +58,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { imageBase64, prompt, size, count, tool, faceLock, productLock, lighting } = req.body || {};
+    const { imageBase64, prompt, size, count, tool, faceLock, productLock, lighting, retouchProfile, retouchStrength, backgroundMode } = req.body || {};
     if (typeof imageBase64 !== "string" || imageBase64.length < 100) {
       return res.status(400).json({ error: "Foto tidak valid. Silakan unggah ulang." });
     }
@@ -80,7 +80,18 @@ export default async function handler(req, res) {
     const lightingPresets = { natural: "gunakan cahaya alami lembut dan seimbang", softbox: "gunakan pencahayaan softbox studio profesional yang lembut dan terarah", golden: "gunakan cahaya golden hour hangat", dramatic: "gunakan pencahayaan studio dramatis dengan bayangan terkontrol", clean: "gunakan pencahayaan komersial bersih, terang, dan merata" };
     const lightingInstruction = lightingPresets[lighting] || lightingPresets.softbox;
     const lockInstructions = [faceLock ? "Prioritaskan konsistensi wajah: pertahankan wajah, ciri, ekspresi, dan identitas visual subjek semirip mungkin dengan foto referensi; jangan mengubah wajah." : "", productLock ? "Prioritaskan konsistensi produk: pertahankan bentuk, proporsi, warna, label, logo, material, dan detail produk sesuai foto referensi; jangan mendesain ulang produk." : ""].filter(Boolean).join(" ");
-    const fullPrompt = `Tugas: ${safeTool}. Edit foto referensi sesuai instruksi: ${prompt.trim()}. Gunakan foto referensi sebagai dasar utama. ${lockInstructions} Gunakan ${lightingInstruction}. Pertahankan komposisi dan ciri penting yang tidak diminta untuk diubah. Hasilkan foto realistis, detail, dan profesional.`;
+    const retouchInstructions = {
+      natural: "Lakukan retouch natural: pertahankan tekstur pori kulit, garis ekspresi, dan detail alami. Hilangkan hanya noda sementara yang mengganggu; hindari efek kulit plastik.",
+      studio: "Lakukan retouch studio profesional: rapikan pencahayaan, white balance, dan ketidaksempurnaan kecil secara halus; jaga tekstur dan detail asli.",
+      editorial: "Lakukan retouch editorial beauty yang polished namun realistis: rapikan tone dan detail secara terukur, tanpa mengubah struktur wajah atau membuat kulit tampak seperti plastik.",
+      none: "Jangan lakukan retouch kecantikan tambahan di luar instruksi utama."
+    };
+    const strength = Math.min(100, Math.max(0, Number(retouchStrength) || 0));
+    const retouchInstruction = retouchInstructions[retouchProfile] || retouchInstructions.natural;
+    const backgroundInstruction = backgroundMode === "keep"
+      ? "Pertahankan latar belakang asli semirip mungkin; jangan mengganti lokasi atau menambahkan objek latar yang tidak diminta."
+      : "Latar belakang boleh diubah sesuai instruksi prompt, tetapi pisahkan subjek dan latar secara alami.";
+    const fullPrompt = `Tugas: ${safeTool}. Edit foto referensi sesuai instruksi: ${prompt.trim()}. Gunakan foto referensi sebagai dasar utama. ${lockInstructions} Gunakan ${lightingInstruction}. ${retouchInstruction} Intensitas retouch ${strength} dari 100; sesuaikan agar tetap natural dan tidak berlebihan. ${backgroundInstruction} Pertahankan komposisi dan ciri penting yang tidak diminta untuk diubah. Hasilkan foto realistis, detail, dan profesional.`;
 
     const n = Math.min(4, Math.max(1, Number.parseInt(count, 10) || 1));
     const images = await Promise.all(
