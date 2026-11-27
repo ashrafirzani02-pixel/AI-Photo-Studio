@@ -31,3 +31,10 @@
 .history-item b{font-size:9px;color:#6c5944}
 .history-item small{font-size:8px;color:#9d9388;line-height:1.4;margin-top:4px;overflow-wrap:anywhere}
 @media(max-width:760px){.compare-grid{gap:7px}.history-grid{grid-template-columns:1fr 1fr}.history-item img{width:43px;height:43px}.history-item small{font-size:7px}}
+
+
+/* v3.0 Professional Retouch Engine */
+.retouch-range{width:100%;accent-color:#c87922;margin:2px 0 7px;cursor:pointer}
+.pro-controls .fieldlabel{margin-top:13px}
+.pro-controls .fieldlabel:first-child{margin-top:4px}
+.lock-option:focus-within,.lighting-select:focus{outline:2px solid #e7bd8d;outline-offset:1px}
