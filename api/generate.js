@@ -58,7 +58,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { imageBase64, prompt, size, count, tool } = req.body || {};
+    const { imageBase64, prompt, size, count, tool, faceLock, productLock, lighting } = req.body || {};
     if (typeof imageBase64 !== "string" || imageBase64.length < 100) {
       return res.status(400).json({ error: "Foto tidak valid. Silakan unggah ulang." });
     }
@@ -77,7 +77,7 @@ export default async function handler(req, res) {
     const outputSize = allowedSizes.has(size) ? size : "1024x1024";
     const [width, height] = outputSize.split("x").map(Number);
     const safeTool = typeof tool === "string" ? tool.slice(0, 60) : "Edit foto";
-    const fullPrompt = `Tugas: ${safeTool}. Edit foto referensi yang diunggah sesuai instruksi berikut: ${prompt.trim()}. Gunakan gambar referensi sebagai dasar utama. Pertahankan identitas, komposisi subjek, dan ciri penting yang tidak diminta untuk diubah. Hasilkan foto realistis, berkualitas tinggi, detail, dengan pencahayaan dan hasil akhir profesional.`;
+    const lightingPresets = { natural: "gunakan cahaya alami lembut dan seimbang", softbox: "gunakan pencahayaan softbox studio profesional yang lembut dan terarah", golden: "gunakan cahaya golden hour hangat", dramatic: "gunakan pencahayaan studio dramatis dengan bayangan terkontrol", clean: "gunakan pencahayaan komersial bersih, terang, dan merata" };\n    const lightingInstruction = lightingPresets[lighting] || lightingPresets.softbox;\n    const lockInstructions = [faceLock ? "Prioritaskan konsistensi wajah: pertahankan wajah, ciri, ekspresi, dan identitas visual subjek semirip mungkin dengan foto referensi; jangan mengubah wajah." : "", productLock ? "Prioritaskan konsistensi produk: pertahankan bentuk, proporsi, warna, label, logo, material, dan detail produk sesuai foto referensi; jangan mendesain ulang produk." : ""].filter(Boolean).join(" ");\n    const fullPrompt = `Tugas: ${safeTool}. Edit foto referensi sesuai instruksi: ${prompt.trim()}. Gunakan foto referensi sebagai dasar utama. ${lockInstructions} Gunakan ${lightingInstruction}. Pertahankan komposisi dan ciri penting yang tidak diminta untuk diubah. Hasilkan foto realistis, detail, dan profesional.`;
 
     const n = Math.min(4, Math.max(1, Number.parseInt(count, 10) || 1));
     const images = await Promise.all(
